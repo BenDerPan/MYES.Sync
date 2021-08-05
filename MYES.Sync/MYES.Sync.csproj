@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>MYES</RootNamespace>
+    <PackageIcon>logo.png</PackageIcon>
+    <PackageIconUrl />
+    <Description>Mysql to elasticsearch sync tool.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/BenDerPan/MYES.Sync</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/BenDerPan/MYES.Sync</RepositoryUrl>
+    <RepositoryType>github</RepositoryType>
+    <PackageTags>Mysql Elasticsearch Sync Import</PackageTags>
+    <Authors>BenDerPan</Authors>
+    <Company>BenDerPan</Company>
+    <Product>BenDerPan</Product>
+    <Copyright>BenDerPan</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MySql.Data" Version="8.0.26" />
+    <PackageReference Include="YamlDotNet" Version="11.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="logo.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
+
+</Project>
