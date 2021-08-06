@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <PackageReference Include="MySql.Data" Version="8.0.26" />
+    <PackageReference Include="NEST" Version="7.13.2" />
     <PackageReference Include="YamlDotNet" Version="11.2.1" />
   </ItemGroup>
 
