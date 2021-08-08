@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Threading;
 using MySql.Data.MySqlClient;
 using Nest;
 
@@ -40,19 +42,85 @@ namespace MYES
 
         public void CreateTableIndex(MySqlConnection conn ,DatabaseDefine db,TableDefine table,List<ColumnDefine> columns)
         {
-            var node = new Uri("http://localhost:9200");
-            var es = new ElasticClient(node);
+            var es =ESBulk.GetElasticClient(new Uri("http://localhost:9200"));
 
             var indexName = $"index_{db.SchemaName}___{table.TableName}".ToLower();
 
             //检查索引是否存在
-            if (!es.Indices.Exists(indexName).Exists)
+            if (ESBulk.CreateIndex(es,indexName))
             {
-                var res=es.Indices.Create(indexName);
-
-              
-               
+                Console.WriteLine($"创建索引:{indexName} 成功...OK");
             }
+            var currentPage = 1;
+            var pageSize = 1000;
+            var sql = $"select {string.Join(",", columns.Select(s => s.ColumnName))} from {db.SchemaName}.{table.TableName}";// limit {(currentPage - 1) * pageSize},{pageSize}";
+
+            
+            MySqlCommand cmd = new MySqlCommand(sql, conn);
+            MySqlDataReader reader = null;
+            try
+            {
+                Console.WriteLine($"执行SQL：{sql}");
+                int counter = 0;
+                using (reader = cmd.ExecuteReader())
+                {
+                    if (reader.HasRows)
+                    {
+                        
+                        List<Dictionary<string, object>> bulkList = new List<Dictionary<string, object>>();
+                        while (reader.Read())
+                        {
+                            var dict = new Dictionary<string, object>();
+                            for (int i = 0; i < columns.Count; i++)
+                            {
+                                dict[columns[i].ColumnName] = reader.GetValue(i);
+                            }
+
+                            bulkList.Add(dict);
+
+                            if (bulkList.Count>=1000)
+                            {
+                                var retryCount=0;
+                                while(!ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, bulkList))
+                                {
+                                    var sleepSeconds = 30 + 10000 * retryCount;
+                                    Console.WriteLine($"[{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}] 速度过快，需要等待索引创建完成！等待{sleepSeconds}秒后重试...");
+                                    Thread.Sleep(sleepSeconds);
+                                    retryCount++;
+                                }
+                                
+                                bulkList.Clear();
+
+                                //Thread.Sleep(1000);
+                            }
+
+                            counter++;
+                        }
+
+                        if (bulkList.Count>0)
+                        {
+                            var retryCount = 0;
+                            while (!ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, bulkList))
+                            {
+                                var sleepSeconds = 30 + 10000 * retryCount;
+                                Console.WriteLine($"[{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}] 速度过快，需要等待索引创建完成！等待{sleepSeconds}秒后重试...");
+                                Thread.Sleep(sleepSeconds);
+                                retryCount++;
+                            }
+                            bulkList.Clear();
+                            //Thread.Sleep(1000);
+                        }
+                    }
+                }
+
+                Console.WriteLine($"成功导入：{counter} 条数据");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"导入异常：{e.Message}");
+            }
+
+
 
 
 
