@@ -47,7 +47,7 @@ namespace MYES
                 Settings = new IndexSettings
                 {
                     NumberOfReplicas = 1,//副本数
-                    NumberOfShards = 3//分片数
+                    NumberOfShards = 1//分片数
                 }
             };
 

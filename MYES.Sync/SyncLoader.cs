@@ -18,6 +18,7 @@ namespace MYES
         
         public void Test()
         {
+            var es = ESBulk.GetElasticClient(new Uri("http://localhost:9200"));
             var conStr = _cfg.MySqlConnectionString;
             using (MySqlConnection conn = new MySqlConnection(conStr))
             {
@@ -32,7 +33,7 @@ namespace MYES
                     {
                         var colums = GetTableColumns(conn, db.SchemaName, table.TableName);
 
-                        CreateTableIndex(conn,db, table, colums);
+                        CreateTableIndex(es,conn,db, table, colums);
 
 
                     }
@@ -40,9 +41,9 @@ namespace MYES
             }
         }
 
-        public void CreateTableIndex(MySqlConnection conn ,DatabaseDefine db,TableDefine table,List<ColumnDefine> columns)
+        public void CreateTableIndex(IElasticClient es,MySqlConnection conn ,DatabaseDefine db,TableDefine table,List<ColumnDefine> columns)
         {
-            var es =ESBulk.GetElasticClient(new Uri("http://localhost:9200"));
+            
 
             var indexName = $"index_{db.SchemaName}___{table.TableName}".ToLower();
 
@@ -53,7 +54,7 @@ namespace MYES
             }
             var currentPage = 1;
             var pageSize = 1000;
-            var sql = $"select {string.Join(",", columns.Select(s => s.ColumnName))} from {db.SchemaName}.{table.TableName}";// limit {(currentPage - 1) * pageSize},{pageSize}";
+            var sql = $"select {string.Join(",", columns.Select(s => $"`{s.ColumnName}`"))} from `{db.SchemaName}`.`{table.TableName}`";// limit {(currentPage - 1) * pageSize},{pageSize}";
 
             
             MySqlCommand cmd = new MySqlCommand(sql, conn);
@@ -73,7 +74,17 @@ namespace MYES
                             var dict = new Dictionary<string, object>();
                             for (int i = 0; i < columns.Count; i++)
                             {
-                                dict[columns[i].ColumnName] = reader.GetValue(i);
+                                var value= reader.GetValue(i);
+                                if (value==DBNull.Value)
+                                {
+                                    dict[columns[i].ColumnName] = GetDefaultValue(columns[i].DataType);
+                                }
+                                else
+                                {
+                                    dict[columns[i].ColumnName] = reader.GetValue(i);
+                                }
+                                
+
                             }
 
                             bulkList.Add(dict);
@@ -81,7 +92,7 @@ namespace MYES
                             if (bulkList.Count>=1000)
                             {
                                 var retryCount=0;
-                                while(!ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, bulkList))
+                                while(!ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, new List<Dictionary<string,object>>(bulkList)))
                                 {
                                     var sleepSeconds = 30 + 10000 * retryCount;
                                     Console.WriteLine($"[{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}] 速度过快，需要等待索引创建完成！等待{sleepSeconds}秒后重试...");
@@ -100,7 +111,7 @@ namespace MYES
                         if (bulkList.Count>0)
                         {
                             var retryCount = 0;
-                            while (!ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, bulkList))
+                            while (!ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, new List<Dictionary<string, object>>(bulkList)))
                             {
                                 var sleepSeconds = 30 + 10000 * retryCount;
                                 Console.WriteLine($"[{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}] 速度过快，需要等待索引创建完成！等待{sleepSeconds}秒后重试...");
@@ -125,6 +136,56 @@ namespace MYES
 
 
 
+        }
+
+        private object GetDefaultValue(string dataType)
+        {
+            switch (dataType)
+            {
+                case "varchar":
+                    return "";
+               
+                case "longtext":
+                    return "";
+
+                case "bigint":
+                    return 0;
+                case "datetime":
+                    return DateTime.MinValue;
+                case "time":
+                    return DateTime.MinValue;
+                case "timestamp":
+                    return 0;
+                case "int":
+                    return 0;
+                case "tinyint":
+                    return 0;
+                case "integer":
+                    return 0;
+                case "decimal":
+                    return 0.0;
+                case "double":
+                    return 0.0;
+                case "float":
+                    return 0.0;
+                case "text":
+                    return "";
+                case "mediumtext":
+                    return "";
+                case "tinytext":
+                    return "";
+                case "char":
+                    return "";
+                case "enum":
+                    return 0;
+
+                case "blob":
+                    return "";
+                case "tinyblob":
+                    return "";
+                default:
+                    return  "";
+            }
         }
 
         public List<DatabaseDefine> GetAllDatabses(MySqlConnection conn)
