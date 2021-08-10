@@ -15,11 +15,17 @@ namespace MYES
 
         public List<string> IgnoreDatabases { get; set; }
 
+        public List<string> ElasticSearchUris { get; set; }
+
+        
+
         public Config()
         {
             MySqlConnectionString= "server=localhost;port=3306;uid=test;pwd=test;charset=utf8";
             SyncDatabases = new List<string>();
             IgnoreDatabases = new List<string>();
+            ElasticSearchUris = new List<string>();
+
         }
 
 
