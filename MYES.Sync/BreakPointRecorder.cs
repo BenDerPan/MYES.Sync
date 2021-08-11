@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using MonkeyCache;
 using MonkeyCache.LiteDB;
@@ -21,9 +22,12 @@ namespace MYES
                 return _current;
             }
         }
+
+        readonly static string CacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cache_storage");
         private BreakPointRecorder()
         {
             Barrel.ApplicationId = "MYES.Sync";
+            Barrel.Create(CacheDir, true);
         }
 
 
