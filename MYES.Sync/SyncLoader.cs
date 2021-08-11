@@ -86,6 +86,11 @@ namespace MYES
                 breakPoint = new BreakPoint(db.SchemaName, table.TableName, _cfg.IndexPrefix);
             }
 
+            if (breakPoint.ProcessedCount>0 && breakPoint.ProcessedCount>=tableRecordCount)
+            {
+                return;
+            }
+
             var indexName = breakPoint.GetKey();
 
             //检查索引是否存在
