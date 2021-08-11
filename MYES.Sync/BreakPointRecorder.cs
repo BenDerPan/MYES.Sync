@@ -8,10 +8,6 @@ namespace MYES
 {
     public class BreakPointRecorder
     {
-        readonly object _lckObj = new object();
-
-        readonly Dictionary<string, BreakPoint> _breakPoints = new Dictionary<string, BreakPoint>();
-
         static BreakPointRecorder _current;
         public static BreakPointRecorder Current
         {
@@ -30,55 +26,6 @@ namespace MYES
             Barrel.ApplicationId = "MYES.Sync";
         }
 
-        public bool TryGetBreakPoint(string key,out BreakPoint point)
-        {
-            point = null;
-            lock (_lckObj)
-            {
-                if (_breakPoints.ContainsKey(key))
-                {
-                    point= _breakPoints[key];
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        public bool IsBreakPointExists(string key)
-        {
-            lock (_lckObj)
-            {
-                return _breakPoints.ContainsKey(key);
-            }
-        }
-
-        public void AddBreakPont(string key, BreakPoint point)
-        {
-            lock (_lckObj)
-            {
-                _breakPoints[key] = point;
-            }
-        }
-
-        public void RemoveBreakPont(string key)
-        {
-            lock (_lckObj)
-            {
-                if (_breakPoints.ContainsKey(key))
-                {
-                    _breakPoints.Remove(key);
-                }
-            }
-        }
-
-        public void ClearBreakPoint()
-        {
-            lock (_lckObj)
-            {
-                _breakPoints.Clear();
-            }
-        }
 
         public T Get<T>(string key)
         {

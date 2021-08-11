@@ -17,7 +17,10 @@ namespace MYES
 
         public List<string> ElasticSearchUris { get; set; }
 
-        
+        public string IndexPrefix { get; set; }
+        public int NumberOfReplicas { get; set; }
+
+        public int NumberOfShards { get; set; }
 
         public Config()
         {
@@ -25,7 +28,9 @@ namespace MYES
             SyncDatabases = new List<string>();
             IgnoreDatabases = new List<string>();
             ElasticSearchUris = new List<string>();
-
+            IndexPrefix = string.Empty;
+            NumberOfReplicas = 1;
+            NumberOfShards = 3;
         }
 
 

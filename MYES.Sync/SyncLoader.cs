@@ -16,7 +16,7 @@ namespace MYES
             _cfg = Config.Load(cfgFile);
         }
         
-        public void Test()
+        public void Start()
         {
             var es = ESBulk.GetElasticClient(new Uri(_cfg.ElasticSearchUris[0]));
             var conStr = _cfg.MySqlConnectionString;
@@ -73,18 +73,24 @@ namespace MYES
 
         public void CreateTableIndex(IElasticClient es,MySqlConnection conn ,DatabaseDefine db,TableDefine table,List<ColumnDefine> columns)
         {
-            if (GetMysqlTableRecordCount(conn, db.SchemaName, table.TableName) <= 0)
+            var tableRecordCount = GetMysqlTableRecordCount(conn, db.SchemaName, table.TableName);
+            if (tableRecordCount <= 0)
             {
-                Console.WriteLine($"库：{db.SchemaName}， 表：{table.TableName}数据表为空，跳过......");
+                Console.WriteLine($"Database: {db.SchemaName}, Table:{table.TableName} is empty, will ignore......");
                 return;
             }
 
+            var breakPoint = BreakPointRecorder.Current.Get<BreakPoint>(BreakPoint.GetKey(db.SchemaName, table.TableName, _cfg.IndexPrefix));
+            if (breakPoint==null)
+            {
+                breakPoint = new BreakPoint(db.SchemaName, table.TableName, _cfg.IndexPrefix);
+            }
 
-
-            var indexName = $"index_{db.SchemaName}___{table.TableName}".ToLower();
+            var indexName = breakPoint.GetKey();
 
             //检查索引是否存在
-            if (ESBulk.CreateIndex(es,indexName))
+            ESBulk.CreateIndex(es, indexName, out var isIndexExist,_cfg.NumberOfReplicas,_cfg.NumberOfShards);
+            if (!isIndexExist)
             {
                 //初始化创建索引后，直接填充一条默认数据结构，用于初始化ES Mapping。
                 Dictionary<string, object> indexMapping = new Dictionary<string, object>();
@@ -93,33 +99,32 @@ namespace MYES
                     indexMapping[columns[i].ColumnName] = GetDefaultValue(columns[i].DataType);
                 }
 
-                if (ESBulk.BulkAll(es, indexName, new List<Dictionary<string, object>> { indexMapping }))
+                if (ESBulk.BulkAll(es, indexName, new List<Dictionary<string, object>> { indexMapping }, bulkAllResponse: out var res))
                 {
-                    Console.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>初始Mapping完成...OK");
+                    Console.WriteLine("Init table index mapping......OK");
                 }
                 else
                 {
 
                 }
 
-                Console.WriteLine($"创建索引:{indexName} 成功...OK");
+                Console.WriteLine($"Create index: {indexName} ...OK");
             }
-            var currentPage = 1;
-            var pageSize = 1000;
-            var sql = $"select {string.Join(",", columns.Select(s => $"`{s.ColumnName}`"))} from `{db.SchemaName}`.`{table.TableName}`";// limit {(currentPage - 1) * pageSize},{pageSize}";
+
+            var sql = $"select {string.Join(",", columns.Select(s => $"`{s.ColumnName}`"))} from `{db.SchemaName}`.`{table.TableName}` limit {tableRecordCount} offset {breakPoint.ProcessedCount}";
 
             
             MySqlCommand cmd = new MySqlCommand(sql, conn);
             MySqlDataReader reader = null;
             try
             {
-                Console.WriteLine($"执行SQL：{sql}");
-                int counter = 0;
+                Console.WriteLine($"Executing SQL: {sql}");
+                int totalCount = 0;
+                int successCount = 0;
                 using (reader = cmd.ExecuteReader())
                 {
                     if (reader.HasRows)
                     {
-
                         List<Dictionary<string, object>> bulkList = new List<Dictionary<string, object>>();
                         while (reader.Read())
                         {
@@ -151,59 +156,44 @@ namespace MYES
 
                             if (bulkList.Count >= 1000)
                             {
-                                var retryCount = 0;
-                                while (!ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, new List<Dictionary<string, object>>(bulkList)))
-                                {
-                                    bulkList.ForEach(s =>
-                                    {
-                                        if (!ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, new List<Dictionary<string, object>> { s }))
-                                        {
-
-                                        }
-                                    });
-                                    var sleepSeconds = 30 + 10000 * retryCount;
-                                    Console.WriteLine($"[{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}] 速度过快，需要等待索引创建完成！等待{sleepSeconds}秒后重试...");
-                                    break;
-                                    Thread.Sleep(sleepSeconds);
-                                    retryCount++;
-                                }
-
+                                var isOk = ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, new List<Dictionary<string, object>>(bulkList), bulkAllResponse: out var res);
+                                
+                                
+                                var okCount = res.Items.Where(s => s.IsValid).ToList().Count;
+                                successCount += okCount;
+                                breakPoint.AddProcessedCount(okCount);
+                                BreakPointRecorder.Current.Set<BreakPoint>(breakPoint.GetKey(),breakPoint);
                                 bulkList.Clear();
 
-                                //Thread.Sleep(1000);
+                                if (!isOk)
+                                {
+                                    break;
+                                }
                             }
 
-                            counter++;
+                            totalCount++;
                         }
 
                         if (bulkList.Count > 0)
                         {
-                            var retryCount = 0;
-                            while (!ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, new List<Dictionary<string, object>>(bulkList)))
-                            {
-                                var sleepSeconds = 30 + 10000 * retryCount;
-                                Console.WriteLine($"[{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")}] 速度过快，需要等待索引创建完成！等待{sleepSeconds}秒后重试...");
-                                break;
-                                Thread.Sleep(sleepSeconds);
-                                retryCount++;
-                            }
+                            var isOk = ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, new List<Dictionary<string, object>>(bulkList), bulkAllResponse: out var res);
+
+
+                            var okCount = res.Items.Where(s => s.IsValid).ToList().Count;
+                            successCount += okCount;
+                            breakPoint.AddProcessedCount(okCount);
+                            BreakPointRecorder.Current.Set<BreakPoint>(breakPoint.GetKey(), breakPoint);
                             bulkList.Clear();
-                            //Thread.Sleep(1000);
                         }
                     }
                 }
 
-                Console.WriteLine($"成功导入：{counter} 条数据");
+                Console.WriteLine($"Total: {totalCount}, Success: {successCount}");
             }
             catch (Exception e)
             {
-                Console.WriteLine($"导入异常：{e.Message}");
+                Console.WriteLine($"Import Error：{e}");
             }
-
-
-
-
-
 
         }
 
@@ -213,10 +203,8 @@ namespace MYES
             {
                 case "varchar":
                     return "";
-               
                 case "longtext":
                     return "";
-
                 case "bigint":
                     return 0;
                 case "datetime":
@@ -247,7 +235,6 @@ namespace MYES
                     return "";
                 case "enum":
                     return 0;
-
                 case "blob":
                     return "";
                 case "tinyblob":

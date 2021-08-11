@@ -33,12 +33,14 @@ namespace MYES
             return response.IsValid;
         }
 
-        public static bool CreateIndex(IElasticClient elasticClient, string indexName)
+        public static bool CreateIndex(IElasticClient elasticClient, string indexName, out bool isIndexExist, int numOfReplicas=1,int numOfShards=3)
         {
+            isIndexExist = false;
             var existsResponse = elasticClient.Indices.Exists(indexName);
             // 存在则返回true 不存在创建
             if (existsResponse.Exists)
             {
+                isIndexExist = true;
                 return true;
             }
             //基本配置
@@ -46,8 +48,8 @@ namespace MYES
             {
                 Settings = new IndexSettings
                 {
-                    NumberOfReplicas = 1,//副本数
-                    NumberOfShards = 3//分片数
+                    NumberOfReplicas = numOfReplicas,//副本数
+                    NumberOfShards = numOfShards//分片数
                 }
             };
 
@@ -71,7 +73,7 @@ namespace MYES
             
             return client;
         }
-        public static bool BulkAll<T>(IElasticClient elasticClient, IndexName indexName, IEnumerable<T> list,int size=1000) where T : class
+        public static bool BulkAll<T>(IElasticClient elasticClient, IndexName indexName, IEnumerable<T> list, out BulkAllResponse bulkAllResponse, int size= 1000) where T : class
         {
             var tokenSource = new CancellationTokenSource();
 
@@ -80,7 +82,7 @@ namespace MYES
                     .BackOffTime(TimeSpan.FromSeconds(30))
                     .BackOffRetries(1)
                     .Size(size)
-                    //.RefreshOnCompleted()
+                    .RefreshOnCompleted()
                     .Index(indexName)
                     .BufferToBulk((r, buffer) => r.IndexMany(buffer))
                 , tokenSource.Token);
@@ -88,21 +90,24 @@ namespace MYES
             var countdownEvent = new CountdownEvent(1);
 
             Exception exception = null;
+            BulkAllResponse res = null;
 
             void OnCompleted()
             {
-                Console.WriteLine("BulkAll Finished");
+                Console.WriteLine("[BulkALL] All Finished!!!!");
                 countdownEvent.Signal();
             }
+
 
             var bulkAllObserver = new BulkAllObserver(
                 onNext: response =>
                 {
-                    Console.WriteLine($"Indexed {response.Page * size} with {response.Retries} retries");
+                    Console.WriteLine($"[BulkALL] Indexed {response.Page * size} with {response.Retries} retries, item count: {response.Items.Count}");
+                    res = response;
                 },
                 onError: ex =>
                 {
-                    Console.WriteLine("BulkAll Error : {0}", ex.Message);
+                    Console.WriteLine($"[BulkALL] Error: {ex.Message}");
                     exception = ex;
                     countdownEvent.Signal();
                 },
@@ -112,9 +117,11 @@ namespace MYES
 
             countdownEvent.Wait(tokenSource.Token);
 
+            bulkAllResponse = res;
+
             if (exception != null)
             {
-                Console.WriteLine("BulkHotelGeo Error : {0}", exception.Message);
+                Console.WriteLine($"[BulkALL] Exception : {exception}");
                 return false;
             }
             else

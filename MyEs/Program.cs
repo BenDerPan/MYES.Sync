@@ -7,7 +7,7 @@ namespace MYES
         static void Main(string[] args)
         {
             var loader = new SyncLoader();
-            loader.Test();
+            loader.Start();
         }
     }
 }
