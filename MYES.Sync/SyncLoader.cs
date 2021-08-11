@@ -157,12 +157,16 @@ namespace MYES
                             if (bulkList.Count >= 1000)
                             {
                                 var isOk = ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, new List<Dictionary<string, object>>(bulkList), bulkAllResponse: out var res);
+
+                                if (res!=null)
+                                {
+                                    var okCount = res.Items.Where(s => s.IsValid).ToList().Count;
+                                    successCount += okCount;
+                                    breakPoint.AddProcessedCount(okCount);
+                                    BreakPointRecorder.Current.Set<BreakPoint>(breakPoint.GetKey(), breakPoint);
+                                }
                                 
                                 
-                                var okCount = res.Items.Where(s => s.IsValid).ToList().Count;
-                                successCount += okCount;
-                                breakPoint.AddProcessedCount(okCount);
-                                BreakPointRecorder.Current.Set<BreakPoint>(breakPoint.GetKey(),breakPoint);
                                 bulkList.Clear();
 
                                 if (!isOk)
@@ -178,11 +182,14 @@ namespace MYES
                         {
                             var isOk = ESBulk.BulkAll<Dictionary<string, object>>(es, indexName, new List<Dictionary<string, object>>(bulkList), bulkAllResponse: out var res);
 
+                            if (res != null)
+                            {
+                                var okCount = res.Items.Where(s => s.IsValid).ToList().Count;
+                                successCount += okCount;
+                                breakPoint.AddProcessedCount(okCount);
+                                BreakPointRecorder.Current.Set<BreakPoint>(breakPoint.GetKey(), breakPoint);
+                            }
 
-                            var okCount = res.Items.Where(s => s.IsValid).ToList().Count;
-                            successCount += okCount;
-                            breakPoint.AddProcessedCount(okCount);
-                            BreakPointRecorder.Current.Set<BreakPoint>(breakPoint.GetKey(), breakPoint);
                             bulkList.Clear();
                         }
                     }
